@@ -25,7 +25,7 @@ from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, Autoenc
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
 
-from ldm.modules.lora_huawei import inject_trainable_lora
+# from ldm.modules.lora_huawei import inject_trainable_lora #wll 修改 这个没有这个库吧,先禁用
 
 
 __conditioning_keys__ = {'concat': 'c_concat',
