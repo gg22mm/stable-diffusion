@@ -16,7 +16,7 @@ model:
     concat_mode: true # there will be no context_dim specified in unet,
     monitor: val/loss_simple_ema
     # scale_factor: 0.18215
-    ckpt_path: "models/ldm/inpainting_big/last.ckpt"
+    ckpt_path: "down_models/ldm/inpainting_big/last.ckpt" #https://heibox.uni-heidelberg.de/seafhttp/files/7f06ae5e-0749-4f60-9d26-0bb5ad9ea086/last.ckpt 来自： https://blog.csdn.net/qq_42940160/article/details/131284998
     
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
@@ -71,16 +71,16 @@ data:
     num_workers: 5
     wrap: false
     train:
-      target: ldm.inpainting_dataset.InpaintingTrain
+      target: ldm.data.inpainting_dataset.InpaintingTrain
       params:
-        csv_file: data/INPAINTING/yfl_line.csv
-        data_root: data/INPAINTING/yfl_line
+        csv_file: data/myimages/inpainting/val.csv
+        data_root: '' #data/myimages/inpainting/val/ #路径前缀已经在文训练文本中写了，所以这里就不加前缀了
         size: 512
     validation:
-      target: ldm.inpainting_dataset.InpaintingValidation
+      target: ldm.data.inpainting_dataset.InpaintingValidation
       params:
-        csv_file: data/INPAINTING/yfl_line.csv
-        data_root: data/INPAINTING/yfl_line
+        csv_file: data/myimages/inpainting/val.csv
+        data_root: '' #data/myimages/inpainting/val/ #路径前缀已经在文训练文本中写了，所以这里就不加前缀了
         size: 512
 
 

@@ -41,14 +41,14 @@ class CustomBase(Dataset):
         return example
 
 class CustomTrain(CustomBase):
-    def __init__(self, size, training_images_list_file="data/train.txt"):
+    def __init__(self, size, training_images_list_file="data/coco_images.txt"):
         super().__init__(size, training_images_list_file)
         self.size = size
         self.txt_file = training_images_list_file
 
 
 class CustomTest(CustomBase):
-    def __init__(self, size, test_images_list_file="data/test.txt"):
+    def __init__(self, size, test_images_list_file="data/coco_images.txt"):
         super().__init__(size, test_images_list_file)
 
         self.size = size

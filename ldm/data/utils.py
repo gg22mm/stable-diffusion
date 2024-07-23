@@ -8,9 +8,12 @@ from pathlib import Path
 import numpy as np
 import torch
 from ldm.data.helper_types import Annotation
-from torch._six import string_classes
 from torch.utils.data._utils.collate import np_str_obj_array_pattern, default_collate_err_msg_format
 from tqdm import tqdm
+
+# from torch._six import string_classes #wll 修改，这样报错 ： 主要原因是因为 torcha 升级到2.0之后，这个api不能用了
+int_classes = int
+string_classes =str  #这样就解决了，其实里面就是这个声明
 
 
 def unpack(path):

@@ -38,7 +38,8 @@ model:
       params:
         embed_dim: 3
         n_embed: 8192
-        ckpt_path: configs/first_stage_models/vq-f4/model.yaml
+        # ckpt_path: configs/first_stage_models/vq-f4/model.yaml
+        ckpt_path: down_models/ldm/vq-f4/model.ckpt #https://ommer-lab.com/files/latent-diffusion/vq-f4.zip
         ddconfig:
           double_z: false
           z_channels: 3
@@ -63,11 +64,11 @@ data:
     num_workers: 5
     wrap: false
     train:
-      target: taming.data.faceshq.FFHQTrain
+      target: ldm.data.faceshq.FFHQTrain
       params:
         size: 256
     validation:
-      target: taming.data.faceshq.FFHQValidation
+      target: ldm.data.faceshq.FFHQValidation
       params:
         size: 256
 

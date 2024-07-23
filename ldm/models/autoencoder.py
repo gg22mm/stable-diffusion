@@ -304,8 +304,18 @@ class AutoencoderKL(pl.LightningModule):
                  ):
         super().__init__()
         self.image_key = image_key
-        self.encoder = Encoder(**ddconfig)
-        self.decoder = Decoder(**ddconfig)
+        self.encoder = Encoder(**ddconfig) # 用扩散的方式(生成图像的 latents )， Encoder 是压缩到 latent 空间
+        self.decoder = Decoder(**ddconfig) # 用扩散的方式(生成图像的 latents )， Decoder 是解码成为图像
+        '''
+        lossconfig:
+            target: ldm.modules.losses.LPIPSWithDiscriminator 
+            params:
+                disc_start: 50001
+                kl_weight: 0.000001
+                disc_weight: 0.5
+
+            也就是：from ldm.modules.losses.contperceptual import LPIPSWithDiscriminator
+        '''
         self.loss = instantiate_from_config(lossconfig)
         assert ddconfig["double_z"]
         self.quant_conv = torch.nn.Conv2d(2 * ddconfig["z_channels"], 2 * embed_dim, 1)
@@ -348,7 +358,7 @@ class AutoencoderKL(pl.LightningModule):
         else:
             z = posterior.mode()
         dec = self.decode(z)
-        return dec, posterior
+        return dec, posterior #返回： 解码成为图像，压缩到 latent 空间图像
 
     def get_input(self, batch, k):
         x = batch[k]

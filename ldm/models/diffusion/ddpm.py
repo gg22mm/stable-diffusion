@@ -25,7 +25,7 @@ from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, Autoenc
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
 
-# from ldm.modules.lora_huawei import inject_trainable_lora #wll 修改 这个没有这个库吧,先禁用
+# from ldm.modules.lora_huawei import inject_trainable_lora #我修改的
 
 
 __conditioning_keys__ = {'concat': 'c_concat',
@@ -47,7 +47,7 @@ def set_requires_grad(model, requires_grad=True):
         param.requires_grad = requires_grad
 
 class DDPM(pl.LightningModule):
-    # classic DDPM with Gaussian diffusion, in image space
+    # 图像空间高斯扩散的经典DDPM / classic DDPM with Gaussian diffusion, in image space
     def __init__(self,
                  unet_config,
                  timesteps=1000,
@@ -80,7 +80,7 @@ class DDPM(pl.LightningModule):
                  ucg_training=None,
     ):
         super().__init__()
-        assert parameterization in ["eps", "x0", "v"], 'currently only supporting "eps" and "x0" and "v"'
+        assert parameterization in ["eps", "x0", "v"], ' 目前仅支持“eps”、“x0”和“v” '
         self.parameterization = parameterization
         rank_zero_info(f"{self.__class__.__name__}: Running in {self.parameterization}-prediction mode")
         self.cond_stage_model = None
@@ -88,12 +88,15 @@ class DDPM(pl.LightningModule):
         self.log_every_t = log_every_t
         self.first_stage_key = first_stage_key
         self.image_size = image_size
-        self.channels = channels
+        self.channels = channels #3
         self.use_positional_encodings = use_positional_encodings
 
         self.unet_config = unet_config
         self.conditioning_key = conditioning_key
+
+        # 扩散包装
         self.model = DiffusionWrapper(unet_config, conditioning_key)
+
         count_params(self.model, verbose=True)
         self.use_ema = use_ema
         if self.use_ema:
@@ -375,12 +378,14 @@ class DDPM(pl.LightningModule):
         return x
 
     def shared_step(self, batch):
-        x = self.get_input(batch=batch, k=self.first_stage_key)
+        x = self.get_input(batch=batch, k=self.first_stage_key)       
         loss, loss_dict = self(x)
         return loss, loss_dict
 
     def training_step(self, batch, batch_idx):
         loss, loss_dict = self.shared_step(batch)
+        # print('==========================99999999999999999==============',loss)
+        # exit()
 
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
@@ -463,58 +468,77 @@ class DDPM(pl.LightningModule):
         return opt
 
 
-class LatentDiffusion(DDPM):
-    """main class"""
+class LatentDiffusion(DDPM):    
     def __init__(self,
-                 first_stage_config,
-                 cond_stage_config,
-                 num_timesteps_cond=None,
-                 cond_stage_key="image",
-                 cond_stage_trainable=False,
+                 first_stage_config,        #target: ldm.models.autoencoder.AutoencoderKL
+                 cond_stage_config,         #target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
+                 num_timesteps_cond=None,   #1
+                 cond_stage_key="image",    #caption
+                 cond_stage_trainable=False,#true
+                 
                  concat_mode=True,
                  cond_stage_forward=None,
-                 conditioning_key=None,
-                 scale_factor=1.0,
-                 scale_by_std=False,
-                 *args,
-                 **kwargs):
 
-        self.num_timesteps_cond = default(num_timesteps_cond, 1)
+                 conditioning_key=None,     #crossattn
+                 scale_factor=1.0,          #0.18215
+
+                 scale_by_std=False,
+                 *args,                     #()
+                 **kwargs):                 #ldm.models.diffusion.ddpm.LatentDiffusion  所有参数 params       
+
+        self.num_timesteps_cond = default(num_timesteps_cond, 1) #1
         self.scale_by_std = scale_by_std
-        assert self.num_timesteps_cond <= kwargs['timesteps']
+        assert self.num_timesteps_cond <= kwargs['timesteps'] #1<1000
+        
         # for backwards compatibility after implementation of DiffusionWrapper
         if conditioning_key is None:
             conditioning_key = 'concat' if concat_mode else 'crossattn'
         if cond_stage_config == '__is_unconditional__':
             conditioning_key = None
-        ckpt_path = kwargs.pop("ckpt_path", None)
-        ignore_keys = kwargs.pop("ignore_keys", [])
+
+        # conditioning_key='crossattn' 当前为这个
+        ckpt_path = kwargs.pop("ckpt_path", None)   #stable-diffusion-v1.5/v1-5-pruned.ckpt
+        ignore_keys = kwargs.pop("ignore_keys", []) #[]
+        
+
         super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
-        self.concat_mode = concat_mode
-        self.cond_stage_trainable = cond_stage_trainable
-        self.cond_stage_key = cond_stage_key
+        self.concat_mode = concat_mode                      #True
+        self.cond_stage_trainable = cond_stage_trainable    #true
+        self.cond_stage_key = cond_stage_key                #caption
         try:
-            self.num_downs = len(first_stage_config.params.ddconfig.ch_mult) - 1
+            '''
+            ch_mult:
+              - 1
+              - 2
+              - 4
+              - 4
+            '''
+            self.num_downs = len(first_stage_config.params.ddconfig.ch_mult) - 1 #3-1=2
         except:
             self.num_downs = 0
-        if not scale_by_std:
-            self.scale_factor = scale_factor
-        else:
-            self.register_buffer('scale_factor', torch.tensor(scale_factor))
-        self.first_stage_config = first_stage_config
-        self.cond_stage_config = cond_stage_config
-        self.instantiate_first_stage(first_stage_config)
-        self.instantiate_cond_stage(cond_stage_config)
-        self.cond_stage_forward = cond_stage_forward
+
+        if not scale_by_std: #执行这里,因为为False
+            self.scale_factor = scale_factor            
+        else:#不执行这里
+            self.register_buffer('scale_factor', torch.tensor(scale_factor)) # self.register_buffer() 的作用：定义为不可训练的 1.0
+
+
+        self.first_stage_config = first_stage_config #target: ldm.models.autoencoder.AutoencoderKL 包括所有参数
+        self.cond_stage_config = cond_stage_config   #target: ldm.modules.encoders.modules.FrozenCLIPEmbedder 包括所有参数
+        self.instantiate_first_stage(first_stage_config) #根据.yaml来加载模型 AutoencoderKL
+        self.instantiate_cond_stage(cond_stage_config)   #根据.yaml来加载模型 FrozenCLIPEmbedder
+        self.cond_stage_forward = cond_stage_forward     #None
         self.clip_denoised = False  # by default, ldm should not clip denoised since the computing is done in the latent space, and the latent space is not between -1 and 1
         self.bbox_tokenizer = None  
 
         self.restarted_from_ckpt = False
         if ckpt_path is not None:
-            self.init_from_ckpt(ckpt_path, ignore_keys)
+            # init_from_ckpt = sd = torch.load(path, map_location="cpu")
+            self.init_from_ckpt(ckpt_path, ignore_keys) #stable-diffusion-v1.5/v1-5-pruned.ckpt,[]
             self.restarted_from_ckpt = True
 
-
+    ##########################################################################
+    #
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
         ids = torch.round(torch.linspace(0, self.num_timesteps - 1, self.num_timesteps_cond)).long()
@@ -523,8 +547,6 @@ class LatentDiffusion(DDPM):
     @rank_zero_only
     @torch.no_grad()
     def on_train_batch_start(self, batch, batch_idx, dataloader_idx):
-#    def on_train_batch_start(self, batch, batch_idx, dataloader_idx):
-
         # only for very first batch
         if self.scale_by_std and self.current_epoch == 0 and self.global_step == 0 and batch_idx == 0 and not self.restarted_from_ckpt:
             assert self.scale_factor == 1., 'rather not use custom rescaling and std-rescaling simultaneously'
@@ -552,40 +574,50 @@ class LatentDiffusion(DDPM):
         if self.shorten_cond_schedule:
             self.make_cond_schedule()
 
+    # 根据.yaml来加载模型 AutoencoderKL
     def instantiate_first_stage(self, config):
         print("=="*20)
         print(f"Instantiating first stage with config {config}")
         print("=="*20)
-        model = instantiate_from_config(config)
+        model = instantiate_from_config(config) #根据.yaml来加载模型
         self.first_stage_model = model.eval()
-        self.first_stage_model.train = disabled_train
-        for param in self.first_stage_model.parameters():
-            param.requires_grad = False
+        self.first_stage_model.train = disabled_train #返回自身的类
 
+        for param in self.first_stage_model.parameters():
+            param.requires_grad = False #冻结，不在训练已训练好的模型，不在梯度更新
+
+    #根据.yaml来加载模型 FrozenCLIPEmbedder
     def instantiate_cond_stage(self, config):
         print("==="*20)
         print(f"Instantiating cond stage with config {config}")
         print("==="*20)
         if not self.cond_stage_trainable:
+            print("=3-------------1-----------==")
+            
             if config == "__is_first_stage__":
+                print("=3-------------2-----------==")
                 print("Using first stage also as cond stage.")
                 self.cond_stage_model = self.first_stage_model
             elif config == "__is_unconditional__":
+                print("=3-------------3-----------==")
                 print(f"Training {self.__class__.__name__} as an unconditional model.")
                 self.cond_stage_model = None
                 # self.be_unconditional = True
             else:
-                model = instantiate_from_config(config)
+                print("=3-------------4-----------==")
+                model = instantiate_from_config(config) #根据.yaml来加载模型
                 self.cond_stage_model = model.eval()
                 self.cond_stage_model.train = disabled_train
-                for param in self.cond_stage_model.parameters():
+                for param in self.cond_stage_model.parameters():#冻结，不在训练已训练好的模型，不在梯度更新
                     param.requires_grad = False
         else:
+            print("=3-------------5-----------==") #走这里
             assert config != '__is_first_stage__'
             assert config != '__is_unconditional__'
             model = instantiate_from_config(config)
             self.cond_stage_model = model
 
+    # def log_images用到
     def _get_denoise_row_from_list(self, samples, desc='', force_no_decoder_quantization=False):
         denoise_row = []
         for zd in tqdm(samples, desc=desc):
@@ -598,6 +630,7 @@ class LatentDiffusion(DDPM):
         denoise_grid = make_grid(denoise_grid, nrow=n_imgs_per_row)
         return denoise_grid
 
+    # def get_input 用到
     def get_first_stage_encoding(self, encoder_posterior):
         if isinstance(encoder_posterior, DiagonalGaussianDistribution):
             z = encoder_posterior.sample()
@@ -607,10 +640,13 @@ class LatentDiffusion(DDPM):
             raise NotImplementedError(f"encoder_posterior of type '{type(encoder_posterior)}' not yet implemented")
         return self.scale_factor * z.half() if self.use_fp16 else self.scale_factor * z
 
+    # FrozenCLIPEmbedder 的 encode 编码 - 再用中文本的clip的 输入中文 -》 生成文本编码 ， 就是约等于一个图片编码了 (clip的 文本编码 ~= 图片编码)
     def get_learned_conditioning(self, c):
-        if self.cond_stage_forward is None:
-            if hasattr(self.cond_stage_model, 'encode') and callable(self.cond_stage_model.encode):
-                c = self.cond_stage_model.encode(c)
+        if self.cond_stage_forward is None: #执行这里 #None
+            if hasattr(self.cond_stage_model, 'encode') and callable(self.cond_stage_model.encode): #FrozenCLIPEmbedder 的 encode
+                # print('============66666666666666666666================',c)
+                # exit()
+                c = self.cond_stage_model.encode(c) #FrozenCLIPEmbedder 的 encode
                 if isinstance(c, DiagonalGaussianDistribution):
                     c = c.mode()
             else:
@@ -710,14 +746,7 @@ class LatentDiffusion(DDPM):
         return fold, unfold, normalization, weighting
 
     @torch.no_grad()
-    def get_input(self,
-                  batch,
-                  k,
-                  return_first_stage_outputs=False,
-                  force_c_encode=False,
-                  cond_key=None,
-                  return_original_cond=False,
-                  bs=None):
+    def get_input(self,batch,k,return_first_stage_outputs=False,force_c_encode=False,cond_key=None,return_original_cond=False,bs=None):
 
         x = super().get_input(batch, k)
 
@@ -933,14 +962,22 @@ class LatentDiffusion(DDPM):
         return loss
 
     def forward(self, x, c, *args, **kwargs):
+        # # print('模型x',x.shape) #torch.Size([1, 4, 64, 64])  #图片tenser
+        # print('模型c',c) #模型c ['000000064898.jpg']          #图片名
+        # exit()
         t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         if self.model.conditioning_key is not None:
             assert c is not None
             if self.cond_stage_trainable:
-                c = self.get_learned_conditioning(c)
+                # print('============555555555555================',c)
+                # 这里很奇怪，就是用图片tenser去匹配clip的txt
+                c = self.get_learned_conditioning(c) #FrozenCLIPEmbedder 的 encode 编码 - 再用中文本的clip的 输入中文 -》 生成文本编码 ， 就是约等于一个图片编码了 (clip的 文本编码 ~= 图片编码)
             if self.shorten_cond_schedule:  # TODO: drop this option
                 tc = self.cond_ids[t].to(self.device)
+                # print('============66666666666666666666================',c)
                 c = self.q_sample(x_start=c, t=tc, noise=torch.randn_like(c.float()))
+
+        # exit()
         return self.p_losses(x, c, t, *args, **kwargs)
 
     def _rescale_annotations(self, bboxes, crop_coordinates):  # TODO: move to dataset
@@ -1509,7 +1546,7 @@ class LatentDiffusion(DDPM):
         x = 2. * (x - x.min()) / (x.max() - x.min()) - 1.
         return x
 
-
+# 扩散包装
 class DiffusionWrapper(pl.LightningModule):
     def __init__(self, diff_model_config, conditioning_key):
         super().__init__()

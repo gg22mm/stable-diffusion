@@ -78,7 +78,7 @@ class Txt2ImgIterableBaseDataset(IterableDataset):
         return info
 
 
-
+# 这里就用到\ldm\data\faceshq.py ：class FacesBase(Dataset):
 class ConcatDatasetWithIndex(ConcatDataset):
     """Modified from original pytorch code to return dataset idx"""
     def __getitem__(self, idx):
@@ -94,6 +94,7 @@ class ConcatDatasetWithIndex(ConcatDataset):
         return self.datasets[dataset_idx][sample_idx], dataset_idx
 
 
+# \ldm\data\custom.py , \ldm\data\custom_class.py , \ldm\data\faceshq.py , \ldm\data\imagenet.py
 class ImagePaths(Dataset):
     def __init__(self, paths, size=None, random_crop=False, random_flip=False, random_rotate=False, labels=None):
         self.size = size
@@ -104,6 +105,9 @@ class ImagePaths(Dataset):
         self.labels = dict() if labels is None else labels
         self.labels["file_path_"] = paths
         self._length = len(paths)
+
+        # print('--------------------',self.labels)
+        # exit()
 
         if self.size is not None and self.size > 0:
             self.rescaler = albumentations.SmallestMaxSize(max_size=self.size)
@@ -116,6 +120,9 @@ class ImagePaths(Dataset):
                 self.flipor = albumentations.HorizontalFlip(p=0.5)
             if self.random_rotate:
                 self.rotator = albumentations.RandomRotate90(p=0.5)
+
+            self.flipor = albumentations.HorizontalFlip(p=0.5)  #添加了
+            self.rotator = albumentations.RandomRotate90(p=0.5) #添加了
 
             self.preprocessor = albumentations.Compose([self.rescaler, self.cropper, self.flipor, self.rotator])
         else:
@@ -136,11 +143,13 @@ class ImagePaths(Dataset):
     def __getitem__(self, i):
         example = dict()
         example["image"] = self.preprocess_image(self.labels["file_path_"][i])
+       
         for k in self.labels:
             example[k] = self.labels[k][i]
         return example
 
 
+# \ldm\data\faceshq.py
 class NumpyPaths(ImagePaths):
     def preprocess_image(self, image_path):
         image = np.load(image_path).squeeze(0)  # 3 x 1024 x 1024

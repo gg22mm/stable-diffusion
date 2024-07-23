@@ -332,10 +332,12 @@ class SpatialTransformer(nn.Module):
         else:
             self.proj_in = nn.Linear(in_channels, inner_dim)
 
+        
         self.transformer_blocks = nn.ModuleList(
-            [BasicTransformerBlock(inner_dim, n_heads, d_head, dropout=dropout, context_dim=context_dim[d],
-                                   disable_self_attn=disable_self_attn, checkpoint=use_checkpoint)
-                for d in range(depth)]
+            
+            # wll 修改 原版: context_dim=context_dim[d] 报错,改成 context_dim=context_dim[1] 才行： https://blog.csdn.net/lizhong2008/article/details/132257722
+            [ BasicTransformerBlock(inner_dim, n_heads, d_head, dropout=dropout, context_dim=context_dim[0], disable_self_attn=disable_self_attn, checkpoint=use_checkpoint)    for d in range(depth)   ]
+
         )
         if not use_linear:
             self.proj_out = zero_module(nn.Conv2d(inner_dim,

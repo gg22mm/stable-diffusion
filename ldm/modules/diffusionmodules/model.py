@@ -365,7 +365,7 @@ class Model(nn.Module):
     def get_last_layer(self):
         return self.conv_out.weight
 
-
+# 用扩散的方式(生成图像的 latents )， Encoder 是压缩到 latent 空间
 class Encoder(nn.Module):
     def __init__(self, *, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks,
                  attn_resolutions, dropout=0.0, resamp_with_conv=True, in_channels,
@@ -459,7 +459,7 @@ class Encoder(nn.Module):
         h = self.conv_out(h)
         return h
 
-
+# 用扩散的方式(生成图像的 latents )， Decoder 是解码成为图像
 class Decoder(nn.Module):
     def __init__(self, *, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks,
                  attn_resolutions, dropout=0.0, resamp_with_conv=True, in_channels,

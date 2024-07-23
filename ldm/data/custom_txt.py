@@ -15,10 +15,13 @@ import albumentations
 
 class CustomBase(Dataset):
     def __init__(self, img_paths, txt_paths,  size=None, random_crop=False, random_flip=False, random_rotate=False):
+            
 
         self.size = size
+
         self.img_paths = img_paths
         self.txt_paths = txt_paths
+        
         self.random_crop = random_crop
         self.random_flip = random_flip
         self.random_rotate = random_rotate
@@ -33,6 +36,7 @@ class CustomBase(Dataset):
                 self.cropper = albumentations.CenterCrop(height=self.size, width=self.size)
             else:
                 self.cropper = albumentations.RandomCrop(height=self.size, width=self.size)
+            
             if self.random_flip:
                 self.flipor = albumentations.HorizontalFlip(p=0.5)
             if self.random_rotate:
@@ -40,7 +44,7 @@ class CustomBase(Dataset):
 
             self.flipor = albumentations.HorizontalFlip(p=0.5)  #添加了
             self.rotator = albumentations.RandomRotate90(p=0.5) #添加了
-            
+
             self.preprocessor = albumentations.Compose([self.rescaler, self.cropper, self.flipor, self.rotator])
         else:
             self.preprocessor = lambda **kwargs: kwargs
@@ -57,7 +61,7 @@ class CustomBase(Dataset):
 
 
     def __len__(self):
-        return len(self.img_paths) #我修改的
+        return len(self.img_paths)
 
     def __getitem__(self, i):
         example = {}
@@ -66,7 +70,8 @@ class CustomBase(Dataset):
         example["caption"] = self.txt_paths[i]
         return example
 
-# 我修改的
+
+
 class CustomTrain(CustomBase):
     def __init__(self, size, training_images_list_file="data/coco_images.txt", training_txt_list_file="data/coco_txt.txt"):
        
@@ -80,7 +85,7 @@ class CustomTrain(CustomBase):
 
         super().__init__(img_paths=self.img_paths, txt_paths=self.txt_paths,size=self.size)
 
-# 我修改的
+
 class CustomTest(CustomBase):
     def __init__(self, size, test_images_list_file="data/coco_images.txt", test_classes_list_file="data/coco_txt.txt"):
         

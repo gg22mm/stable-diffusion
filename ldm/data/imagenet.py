@@ -117,15 +117,21 @@ class ImageNetBase(Dataset):
                 value, key = line.split(":")
                 self.human2integer_dict[key] = int(value)
 
-    def _load(self):
+    def _load(self):        
         with open(self.txt_filelist, "r") as f:
-            self.relpaths = f.read().splitlines()
+            self.relpaths = f.read().splitlines() #图片列表
             l1 = len(self.relpaths)
-            self.relpaths = self._filter_relpaths(self.relpaths)
-            print("Removed {} files from filelist during filtering.".format(l1 - len(self.relpaths)))
 
-        self.synsets = [p.split("/")[0] for p in self.relpaths]
+            self.relpaths = self._filter_relpaths(self.relpaths)
+            print("-------------在筛选过程中从文件列表中删除了{}个文件".format(l1 - len(self.relpaths)))
+
+        # print(self.relpaths)
+        
+
+        self.synsets = [p.split("/")[0] for p in self.relpaths]       
         self.abspaths = [os.path.join(self.datadir, p) for p in self.relpaths]
+        # print(self.abspaths)
+        # exit()
 
         unique_synsets = np.unique(self.synsets)
         class_dict = dict((synset, i) for i, synset in enumerate(unique_synsets))
@@ -140,12 +146,43 @@ class ImageNetBase(Dataset):
 
         self.human_labels = [human_dict[s] for s in self.synsets]
 
+        '''
+        {
+            'relpath': array(['n01440764/ILSVRC2012_val_00000293.JPEG',
+               'n01440764/ILSVRC2012_val_00002138.JPEG',
+               'n01440764/ILSVRC2012_val_00003014.JPEG', ...,
+               'n15075141/ILSVRC2012_val_00046353.JPEG',
+               'n15075141/ILSVRC2012_val_00047144.JPEG',
+               'n15075141/ILSVRC2012_val_00049174.JPEG'], dtype='<U38'),
+            
+            'synsets': array(['n01440764', 'n01440764', 'n01440764', ..., 'n15075141',
+               'n15075141', 'n15075141'], dtype='<U9'),
+
+            'class_label': array([  0,   0,   0, ..., 999, 999, 999]),
+
+            'human_label': array(['tench, Tinca tinca', 'tench, Tinca tinca', 'tench, Tinca tinca',
+               ..., 'toilet tissue, toilet paper, bathroom tissue',
+               'toilet tissue, toilet paper, bathroom tissue',
+               'toilet tissue, toilet paper, bathroom tissue'], dtype='<U121')
+        }
+
+        '''
         labels = {
             "relpath": np.array(self.relpaths),
             "synsets": np.array(self.synsets),
             "class_label": np.array(self.class_labels),
             "human_label": np.array(self.human_labels),
         }
+
+        # print(labels)
+        # exit()
+        
+        # labels = {
+        #     "relpath": np.array(self.relpaths),
+        #     "synsets": np.array([1]),           #21,841类别(synsets)
+        #     "class_label": np.array([2]),
+        #     "human_label": np.array([3]),
+        # }
 
         if self.process_images:
             self.size = retrieve(self.config, "size", default=256)
@@ -159,7 +196,7 @@ class ImageNetBase(Dataset):
 
 
 class ImageNetTrain(ImageNetBase):
-    NAME = "ILSVRC2012_train"
+    NAME = "ILSVRC2012_validation" #ILSVRC2012_train
     URL = "http://www.image-net.org/challenges/LSVRC/2012/"
     AT_HASH = "a306397ccf9c2ead27155983c254227c0fd938e2"
     FILES = [
@@ -175,50 +212,67 @@ class ImageNetTrain(ImageNetBase):
         super().__init__(**kwargs)
 
     def _prepare(self):
+        
         if self.data_root:
             self.root = os.path.join(self.data_root, self.NAME)
+            # print(self.root) #data/myimages/ILSVRC2012_validation
+            # exit()
         else:
-            cachedir = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
-            self.root = os.path.join(cachedir, "autoencoders/data", self.NAME)
+            # cachedir = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
+            # self.root = os.path.join(cachedir, "autoencoders/data", self.NAME)
+            print('不要在线下载ILSVRC2012,太大了')
+            exit()
 
         self.datadir = os.path.join(self.root, "data")
-        self.txt_filelist = os.path.join(self.root, "filelist.txt")
+        # print(self.datadir) #data/myimages/ILSVRC2012_validation\data
+        # exit()
+
+        
+        self.txt_filelist = os.path.join(self.root, "me_images.txt")  
+        print('================',self.txt_filelist)  
         self.expected_length = 1281167
-        self.random_crop = retrieve(self.config, "ImageNetTrain/random_crop",
-                                    default=True)
+        self.random_crop = retrieve(self.config, "ImageNetTrain/random_crop",   default=True)
+        
+
         if not tdu.is_prepared(self.root):
+
             # prep
             print("Preparing dataset {} in {}".format(self.NAME, self.root))
 
+
             datadir = self.datadir
-            if not os.path.exists(datadir):
-                path = os.path.join(self.root, self.FILES[0])
-                if not os.path.exists(path) or not os.path.getsize(path)==self.SIZES[0]:
-                    import academictorrents as at
-                    atpath = at.get(self.AT_HASH, datastore=self.root)
-                    assert atpath == path
 
-                print("Extracting {} to {}".format(path, datadir))
-                os.makedirs(datadir, exist_ok=True)
-                with tarfile.open(path, "r:") as tar:
-                    tar.extractall(path=datadir)
+            # if not os.path.exists(datadir):
+            #     path = os.path.join(self.root, self.FILES[0])
+            #     if not os.path.exists(path) or not os.path.getsize(path)==self.SIZES[0]:
+            #         import academictorrents as at
+            #         atpath = at.get(self.AT_HASH, datastore=self.root)
+            #         assert atpath == path
 
-                print("Extracting sub-tars.")
-                subpaths = sorted(glob.glob(os.path.join(datadir, "*.tar")))
-                for subpath in tqdm(subpaths):
-                    subdir = subpath[:-len(".tar")]
-                    os.makedirs(subdir, exist_ok=True)
-                    with tarfile.open(subpath, "r:") as tar:
-                        tar.extractall(path=subdir)
+            #     print("Extracting {} to {}".format(path, datadir))
+            #     os.makedirs(datadir, exist_ok=True)
+            #     with tarfile.open(path, "r:") as tar:
+            #         tar.extractall(path=datadir)
 
-            filelist = glob.glob(os.path.join(datadir, "**", "*.JPEG"))
+            #     print("Extracting sub-tars.")
+            #     subpaths = sorted(glob.glob(os.path.join(datadir, "*.tar")))
+            #     for subpath in tqdm(subpaths):
+            #         subdir = subpath[:-len(".tar")]
+            #         os.makedirs(subdir, exist_ok=True)
+            #         with tarfile.open(subpath, "r:") as tar:
+            #             tar.extractall(path=subdir)
+
+            # filelist = glob.glob(os.path.join(datadir, "**", "*.JPEG"))
+            # filelist = glob.glob(os.path.join(datadir, "*.JPEG")) 
+            
+            filelist = glob.glob(os.path.join(datadir, "*", "*.JPEG"))
             filelist = [os.path.relpath(p, start=datadir) for p in filelist]
             filelist = sorted(filelist)
             filelist = "\n".join(filelist)+"\n"
             with open(self.txt_filelist, "w") as f:
                 f.write(filelist)
 
-            tdu.mark_prepared(self.root)
+        tdu.mark_prepared(self.root)
 
 
 class ImageNetValidation(ImageNetBase):
@@ -241,58 +295,67 @@ class ImageNetValidation(ImageNetBase):
         super().__init__(**kwargs)
 
     def _prepare(self):
+        
         if self.data_root:
             self.root = os.path.join(self.data_root, self.NAME)
+            # print(self.root) #data/myimages/ILSVRC2012_validation
+            # exit()
         else:
-            cachedir = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
-            self.root = os.path.join(cachedir, "autoencoders/data", self.NAME)
+            # cachedir = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
+            # self.root = os.path.join(cachedir, "autoencoders/data", self.NAME)
+            print('不要在线下载ILSVRC2012,太大了')
+            exit()
+
         self.datadir = os.path.join(self.root, "data")
-        self.txt_filelist = os.path.join(self.root, "filelist.txt")
-        self.expected_length = 50000
-        self.random_crop = retrieve(self.config, "ImageNetValidation/random_crop",
-                                    default=False)
+        # print(self.datadir) #data/myimages/ILSVRC2012_validation\data
+        # exit()
+
+        
+        self.txt_filelist = os.path.join(self.root, "me_images.txt")    
+        print('================',self.txt_filelist)
+        self.expected_length = 1281167
+        self.random_crop = retrieve(self.config, "ImageNetTrain/random_crop",   default=True)
+        
+
         if not tdu.is_prepared(self.root):
+
             # prep
             print("Preparing dataset {} in {}".format(self.NAME, self.root))
 
+
             datadir = self.datadir
-            if not os.path.exists(datadir):
-                path = os.path.join(self.root, self.FILES[0])
-                if not os.path.exists(path) or not os.path.getsize(path)==self.SIZES[0]:
-                    import academictorrents as at
-                    atpath = at.get(self.AT_HASH, datastore=self.root)
-                    assert atpath == path
 
-                print("Extracting {} to {}".format(path, datadir))
-                os.makedirs(datadir, exist_ok=True)
-                with tarfile.open(path, "r:") as tar:
-                    tar.extractall(path=datadir)
+            # if not os.path.exists(datadir):
+            #     path = os.path.join(self.root, self.FILES[0])
+            #     if not os.path.exists(path) or not os.path.getsize(path)==self.SIZES[0]:
+            #         import academictorrents as at
+            #         atpath = at.get(self.AT_HASH, datastore=self.root)
+            #         assert atpath == path
 
-                vspath = os.path.join(self.root, self.FILES[1])
-                if not os.path.exists(vspath) or not os.path.getsize(vspath)==self.SIZES[1]:
-                    download(self.VS_URL, vspath)
+            #     print("Extracting {} to {}".format(path, datadir))
+            #     os.makedirs(datadir, exist_ok=True)
+            #     with tarfile.open(path, "r:") as tar:
+            #         tar.extractall(path=datadir)
 
-                with open(vspath, "r") as f:
-                    synset_dict = f.read().splitlines()
-                    synset_dict = dict(line.split() for line in synset_dict)
+            #     print("Extracting sub-tars.")
+            #     subpaths = sorted(glob.glob(os.path.join(datadir, "*.tar")))
+            #     for subpath in tqdm(subpaths):
+            #         subdir = subpath[:-len(".tar")]
+            #         os.makedirs(subdir, exist_ok=True)
+            #         with tarfile.open(subpath, "r:") as tar:
+            #             tar.extractall(path=subdir)
 
-                print("Reorganizing into synset folders")
-                synsets = np.unique(list(synset_dict.values()))
-                for s in synsets:
-                    os.makedirs(os.path.join(datadir, s), exist_ok=True)
-                for k, v in synset_dict.items():
-                    src = os.path.join(datadir, k)
-                    dst = os.path.join(datadir, v)
-                    shutil.move(src, dst)
-
-            filelist = glob.glob(os.path.join(datadir, "**", "*.JPEG"))
+            # filelist = glob.glob(os.path.join(datadir, "**", "*.JPEG"))
+            # filelist = glob.glob(os.path.join(datadir, "*.JPEG")) 
+            
+            filelist = glob.glob(os.path.join(datadir, "*", "*.JPEG"))
             filelist = [os.path.relpath(p, start=datadir) for p in filelist]
             filelist = sorted(filelist)
             filelist = "\n".join(filelist)+"\n"
             with open(self.txt_filelist, "w") as f:
                 f.write(filelist)
 
-            tdu.mark_prepared(self.root)
+        tdu.mark_prepared(self.root)
 
 
 
@@ -407,9 +470,13 @@ class ImageNetSRTrain(ImageNetSR):
         super().__init__(**kwargs)
 
     def get_base(self):
-        with open("data/imagenet_train_hr_indices.p", "rb") as f:
-            indices = pickle.load(f)
-        dset = ImageNetTrain(process_images=False,)
+        with open("data/imagenet_val_hr_indices.p", "rb") as f: #按索引来取数据Dataset 
+            indices = pickle.load(f) #subset_indices = [1, 2, 5, 7]      
+
+        dset = ImageNetTrain(process_images=False,data_root='data/myimages/')
+
+        # print(list( Subset(dset, indices) ))
+        # exit()
         return Subset(dset, indices)
 
 
@@ -420,5 +487,5 @@ class ImageNetSRValidation(ImageNetSR):
     def get_base(self):
         with open("data/imagenet_val_hr_indices.p", "rb") as f:
             indices = pickle.load(f)
-        dset = ImageNetValidation(process_images=False,)
+        dset = ImageNetValidation(process_images=False,data_root='data/myimages/')
         return Subset(dset, indices)

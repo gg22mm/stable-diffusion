@@ -38,8 +38,8 @@ class CocoBase(Dataset):
                                  "stuffthings version because labels are stored "
                                  "a bit different.")
 
-        data_json = datajson
-        with open(data_json) as json_file:
+        data_json = datajson #data/MSCOCO/annotations/captions_val2017.json        
+        with open(data_json) as json_file: #data/MSCOCO/annotations/captions_val2017.json
             self.json_data = json.load(json_file)
             self.img_id_to_captions = dict()
             self.img_id_to_filepath = dict()
@@ -47,23 +47,24 @@ class CocoBase(Dataset):
 
         assert data_json.split("/")[-1] in ["captions_train2017.json",
                                             "captions_val2017.json"]
+        
+        # wll 修改 这个需要每一次打印修改
         if self.stuffthing:
-            self.segmentation_prefix = (
-                "data/cocostuffthings/val2017" if
-                data_json.endswith("captions_val2017.json") else
-                "data/cocostuffthings/train2017")
+            self.segmentation_prefix='data/MSCOCO/val2017/'
         else:
-            self.segmentation_prefix = (
-                "data/coco/annotations/stuff_val2017_pixelmaps" if
-                data_json.endswith("captions_val2017.json") else
-                "data/coco/annotations/stuff_train2017_pixelmaps")
+            self.segmentation_prefix='data/MSCOCO/val2017/'
 
-        imagedirs = self.json_data["images"]
+        
+
+        imagedirs = self.json_data["images"]       
         self.labels = {"image_ids": list()}
+
         for imgdir in tqdm(imagedirs, desc="ImgToPath"):
+
             self.img_id_to_filepath[imgdir["id"]] = os.path.join(dataroot, imgdir["file_name"])
             self.img_id_to_captions[imgdir["id"]] = list()
-            pngfilename = imgdir["file_name"].replace("jpg", "png")
+            pngfilename = imgdir["file_name"]# wll 修改  .replace("jpg", "png")
+
             self.img_id_to_segmentation_filepath[imgdir["id"]] = os.path.join(
                 self.segmentation_prefix, pngfilename)
             if given_files is not None:
@@ -153,8 +154,8 @@ class CocoImagesAndCaptionsTrain(CocoBase):
     """returns a pair of (image, caption)"""
     def __init__(self, size, onehot_segmentation=False, use_stuffthing=False, crop_size=None, force_no_crop=False):
         super().__init__(size=size,
-                         dataroot="data/coco/train2017",
-                         datajson="data/coco/annotations/captions_train2017.json",
+                         dataroot="data/MSCOCO/val2017",
+                         datajson="data/MSCOCO/annotations/captions_val2017.json",
                          onehot_segmentation=onehot_segmentation,
                          use_stuffthing=use_stuffthing, crop_size=crop_size, force_no_crop=force_no_crop)
 
@@ -167,8 +168,8 @@ class CocoImagesAndCaptionsValidation(CocoBase):
     def __init__(self, size, onehot_segmentation=False, use_stuffthing=False, crop_size=None, force_no_crop=False,
                  given_files=None):
         super().__init__(size=size,
-                         dataroot="data/coco/val2017",
-                         datajson="data/coco/annotations/captions_val2017.json",
+                         dataroot="data/MSCOCO/val2017",
+                         datajson="data/MSCOCO/annotations/captions_val2017.json",
                          onehot_segmentation=onehot_segmentation,
                          use_stuffthing=use_stuffthing, crop_size=crop_size, force_no_crop=force_no_crop,
                          given_files=given_files)
