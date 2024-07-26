@@ -963,22 +963,79 @@ class LatentDiffusion(DDPM):
 
     def forward(self, x, c, *args, **kwargs):
         # # print('模型x',x.shape) #torch.Size([1, 4, 64, 64])  #图片tenser
-        # print('模型c',c) #模型c ['000000064898.jpg']          #图片名
+        # print('模型c',c) #模型c ['青花瓷风格，一只可爱的哈士奇'] #图片说明
         # exit()
         t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         if self.model.conditioning_key is not None:
             assert c is not None
             if self.cond_stage_trainable:
-                # print('============555555555555================',c)
-                # 这里很奇怪，就是用图片tenser去匹配clip的txt
+                # print('============555555555555================',c)               
                 c = self.get_learned_conditioning(c) #FrozenCLIPEmbedder 的 encode 编码 - 再用中文本的clip的 输入中文 -》 生成文本编码 ， 就是约等于一个图片编码了 (clip的 文本编码 ~= 图片编码)
             if self.shorten_cond_schedule:  # TODO: drop this option
                 tc = self.cond_ids[t].to(self.device)
                 # print('============66666666666666666666================',c)
                 c = self.q_sample(x_start=c, t=tc, noise=torch.randn_like(c.float()))
 
+                '''
+                def extract_into_tensor(a, t, x_shape):
+                    b, *_ = t.shape
+                    out = a.gather(-1, t)
+                    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+                
+                # 特征融合
+                def q_sample(self, x_start, t, noise=None):
+                    noise = default(noise, lambda: torch.randn_like(x_start))
+                    return (extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start    +   extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise)
+                    
+                def get_loss(self, pred, target, mean=True):
+                    if self.loss_type == 'l1':
+                        loss = (target - pred).abs()
+                        if mean:
+                            loss = loss.mean()
+                    elif self.loss_type == 'l2':
+                        if mean:
+                            loss = torch.nn.functional.mse_loss(target, pred)
+                        else:
+                            loss = torch.nn.functional.mse_loss(target, pred, reduction='none')
+                    else:
+                        raise NotImplementedError("unknown loss type '{loss_type}'")
+
+                    return loss
+
+                def p_losses(self, x_start, t, noise=None):
+                    noise = default(noise, lambda: torch.randn_like(x_start))
+                    x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+                    model_out = self.model(x_noisy, t)
+
+                    loss_dict = {}
+                    if self.parameterization == "eps":
+                        target = noise
+                    elif self.parameterization == "x0":
+                        target = x_start
+                    else:
+                        raise NotImplementedError(f"Paramterization {self.parameterization} not yet supported")
+
+                    loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3])
+
+                    log_prefix = 'train' if self.training else 'val'
+
+                    loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
+                    loss_simple = loss.mean() * self.l_simple_weight
+
+                    loss_vlb = (self.lvlb_weights[t] * loss).mean()
+                    loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+
+                    loss = loss_simple + self.original_elbo_weight * loss_vlb
+
+                    loss_dict.update({f'{log_prefix}/loss': loss})
+
+                    return loss, loss_dict
+                '''
+
+      
+
         # exit()
-        return self.p_losses(x, c, t, *args, **kwargs)
+        return self.p_losses(x, c, t, *args, **kwargs) #x=图片tenser,c=图片lable说明clip编码encode,t=随机tenser
 
     def _rescale_annotations(self, bboxes, crop_coordinates):  # TODO: move to dataset
         def rescale_bbox(bbox):
@@ -990,6 +1047,7 @@ class LatentDiffusion(DDPM):
 
         return [rescale_bbox(b) for b in bboxes]
 
+    # 模型预测 = 特征融合 x_noisy , t=随机tenser, cond=图片lable说明clip编码encode
     def apply_model(self, x_noisy, t, cond, return_ids=False):
 
         if isinstance(cond, dict):
@@ -1077,6 +1135,7 @@ class LatentDiffusion(DDPM):
                 cond_list = [cond for i in range(z.shape[-1])]  # Todo make this more efficient
 
             # apply model by loop over crops
+            # # 扩散包装  self.model = DiffusionWrapper(unet_config, conditioning_key)
             output_list = [self.model(z_list[i], t, **cond_list[i]) for i in range(z.shape[-1])]
             assert not isinstance(output_list[0],
                                   tuple)  # todo cant deal with multiple model outputs check this never happens
@@ -1114,10 +1173,46 @@ class LatentDiffusion(DDPM):
         kl_prior = normal_kl(mean1=qt_mean, logvar1=qt_log_variance, mean2=0.0, logvar2=0.0)
         return mean_flat(kl_prior) / np.log(2.0)
 
-    def p_losses(self, x_start, cond, t, noise=None):
+    def p_losses(self, x_start, cond, t, noise=None):#x_start=图片tenser,cond=图片lable说明clip编码encode,t=随机tenser
         noise = default(noise, lambda: torch.randn_like(x_start))
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        model_output = self.apply_model(x_noisy, t, cond)
+        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise) #特征融合 = x_start 为图片tenser, t=随机tenser, noise=随机的噪声图
+        
+        # 扩散模型 - 用UNetModel进行
+        model_output = self.apply_model(x_noisy, t, cond) #模型预测 = 特征融合 x_noisy , t=随机tenser, cond=图片lable说明clip编码encode
+        '''
+        # 扩散包装 self.model = DiffusionWrapper(unet_config, conditioning_key)
+        class DiffusionWrapper(pl.LightningModule):
+            def __init__(self, diff_model_config, conditioning_key):
+                super().__init__()
+                print("==="*20)
+                print(f"Instantiating Unet with config {diff_model_config}")
+                print("==="*20)
+                self.diffusion_model = instantiate_from_config(diff_model_config) #target: ldm.modules.diffusionmodules.openaimodel.UNetModel
+                self.conditioning_key = conditioning_key
+
+                assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm']
+
+            def forward(self, x, t, c_concat: list = None, c_crossattn: list = None):
+                if self.conditioning_key is None:
+                    out = self.diffusion_model(x, t)
+                elif self.conditioning_key == 'concat':
+                    xc = torch.cat([x] + c_concat, dim=1)
+                    out = self.diffusion_model(xc, t)
+                elif self.conditioning_key == 'crossattn':
+                    cc = torch.cat(c_crossattn, 1)
+                    out = self.diffusion_model(x, t, context=cc)
+                elif self.conditioning_key == 'hybrid':
+                    xc = torch.cat([x] + c_concat, dim=1)
+                    cc = torch.cat(c_crossattn, 1)
+                    out = self.diffusion_model(xc, t, context=cc)
+                elif self.conditioning_key == 'adm':
+                    cc = c_crossattn[0]
+                    out = self.diffusion_model(x, t, y=cc)
+                else:
+                    raise NotImplementedError()
+                return out
+        '''
+
 
         loss_dict = {}
         prefix = 'train' if self.training else 'val'
@@ -1553,7 +1648,7 @@ class DiffusionWrapper(pl.LightningModule):
         print("==="*20)
         print(f"Instantiating Unet with config {diff_model_config}")
         print("==="*20)
-        self.diffusion_model = instantiate_from_config(diff_model_config)
+        self.diffusion_model = instantiate_from_config(diff_model_config) #target: ldm.modules.diffusionmodules.openaimodel.UNetModel
         self.conditioning_key = conditioning_key
 
         assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm']
